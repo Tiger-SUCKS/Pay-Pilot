@@ -1,53 +1,34 @@
-package com.paypilot.entity;
+package com.paypilot.dto;
 
-import jakarta.persistence.*;
-import java.time.LocalDateTime;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 
-@Entity
-@Table(name = "payments")
-public class Payment {
+public class PaymentRequest {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
+    @NotNull(message = "Amount is required")
+    @Positive(message = "Amount must be greater than zero")
     private Double amount;
 
+    @NotBlank(message = "Payment method is required")
+    @Pattern(
+            regexp = "UPI|CARD",
+            message = "Payment method must be either UPI or CARD"
+    )
     private String paymentMethod;
 
+    @NotBlank(message = "Status is required")
+    @Pattern(
+            regexp = "SUCCESSFUL|FAILED",
+            message = "Status must be either SUCCESSFUL or FAILED"
+    )
     private String status;
 
     private String failureReason;
 
+    @NotBlank(message = "Customer type is required")
     private String customerType;
-
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-    }
-    @Column(nullable = false)
-    private LocalDateTime createdAt;
-
-    public Payment() {
-    }
-
-    public Long getId() {
-        return id;
-    }
-    @Column(nullable = false, unique = true)
-    private String idempotencyKey;
-
-    public String getIdempotencyKey() {
-        return idempotencyKey;
-    }
-
-    public void setIdempotencyKey(String idempotencyKey) {
-        this.idempotencyKey = idempotencyKey;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
 
     public Double getAmount() {
         return amount;
@@ -87,13 +68,5 @@ public class Payment {
 
     public void setCustomerType(String customerType) {
         this.customerType = customerType;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
     }
 }
