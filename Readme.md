@@ -2,27 +2,39 @@
 
 ### Payment Intelligence & Failure Recovery System
 
-PayPilot is a Java-based payment intelligence and failure recovery platform built using **Spring Boot, Spring Data JPA, Hibernate, MySQL, HTML, CSS, and JavaScript**.
+PayPilot is a backend-focused payment intelligence and failure recovery system built using **Java, Spring Boot, Spring Data JPA, Hibernate, and MySQL**.
 
-The system allows users to create and manage payment transactions, monitor payment performance, analyze failed payments, and generate recovery recommendations based on failure reasons.
+The system provides REST APIs for payment transaction management, payment analytics, failure classification, recovery strategy selection, retry policy calculation, request validation, and idempotent payment creation.
+
+It also includes an interactive web dashboard and OpenAPI/Swagger documentation for API testing.
 
 ---
 
-## 🚀 Features
+## 🚀 Key Features
 
 - Create payment transactions
-- View all payment transactions
-- Delete payment transactions
-- Store payment data in MySQL
+- Idempotent payment creation using `Idempotency-Key`
+- View payments using pagination
+- Filter payments by:
+    - Status
+    - Payment method
+    - Customer type
+- Sort payments by supported fields
 - Track successful and failed payments
 - Calculate payment failure rate
-- Analyze payment failure reasons
-- Generate recovery recommendations
+- Classify payment failures into categories
+- Determine recovery strategies
+- Determine retry eligibility
+- Calculate retry delays using exponential backoff
+- Generate failure recovery recommendations
+- Request validation using Jakarta Bean Validation
+- Global exception handling
+- Custom payment-not-found handling
+- Persistent MySQL storage using JPA/Hibernate
 - Interactive payment dashboard
-- Payment status badges
 - RESTful APIs
-- Persistent database storage
-- Secure database password configuration using environment variables
+- OpenAPI/Swagger API documentation
+- Environment-based database password configuration
 
 ---
 
@@ -35,6 +47,7 @@ The system allows users to create and manage payment transactions, monitor payme
 - Spring Data JPA
 - Hibernate
 - REST APIs
+- Jakarta Bean Validation
 
 ### Database
 
@@ -46,6 +59,11 @@ The system allows users to create and manage payment transactions, monitor payme
 - CSS
 - JavaScript
 
+### API Documentation
+
+- OpenAPI 3
+- Swagger UI
+
 ### Development Tools
 
 - IntelliJ IDEA
@@ -55,24 +73,37 @@ The system allows users to create and manage payment transactions, monitor payme
 
 ---
 
-## 🏗️ Project Architecture
+## 🏗️ Architecture
 
 ```text
                          PayPilot
                             │
-                 ┌──────────┴──────────┐
-                 │                     │
-             Frontend               Backend
-          HTML/CSS/JS            Spring Boot
-                                      │
-                              ┌───────┴───────┐
-                              │               │
-                         Controller       Service
-                                              │
-                                         Repository
-                                              │
-                                              ▼
-                                            MySQL
+                     REST API Layer
+                            │
+                     ┌──────┴──────┐
+                     │ Controller  │
+                     └──────┬──────┘
+                            │
+                     DTO + Validation
+                            │
+                     ┌──────┴──────┐
+                     │   Service   │
+                     └──────┬──────┘
+                            │
+              ┌─────────────┼─────────────┐
+              │             │             │
+       Failure Analyzer  Recovery     Retry Policy
+              │           Engine          Engine
+              │             │             │
+              └─────────────┼─────────────┘
+                            │
+                     Repository Layer
+                            │
+                    JPA Specification
+                            │
+                         Hibernate
+                            │
+                          MySQL
 ```
 
 ---
@@ -87,11 +118,52 @@ PayPilot/
 │   │   ├── java/
 │   │   │   └── com/
 │   │   │       └── paypilot/
+│   │   │           │
 │   │   │           ├── PayPilotApplication.java
+│   │   │           │
+│   │   │           ├── analyzer/
+│   │   │           │   └── FailureAnalyzer.java
+│   │   │           │
+│   │   │           ├── config/
+│   │   │           │   └── OpenApiConfig.java
+│   │   │           │
 │   │   │           ├── controller/
-│   │   │           ├── model/
+│   │   │           │   └── PaymentController.java
+│   │   │           │
+│   │   │           ├── dto/
+│   │   │           │   ├── PaymentAnalyticsResponse.java
+│   │   │           │   ├── PaymentRequest.java
+│   │   │           │   └── PaymentResponse.java
+│   │   │           │
+│   │   │           ├── entity/
+│   │   │           │   └── Payment.java
+│   │   │           │
+│   │   │           ├── enums/
+│   │   │           │   ├── FailureCategory.java
+│   │   │           │   ├── PaymentMethod.java
+│   │   │           │   ├── PaymentStatus.java
+│   │   │           │   └── RecoveryStrategy.java
+│   │   │           │
+│   │   │           ├── exception/
+│   │   │           │   ├── ErrorResponse.java
+│   │   │           │   ├── GlobalExceptionHandler.java
+│   │   │           │   └── PaymentNotFoundException.java
+│   │   │           │
+│   │   │           ├── recovery/
+│   │   │           │   └── RecoveryStrategyEngine.java
+│   │   │           │
 │   │   │           ├── repository/
-│   │   │           └── service/
+│   │   │           │   └── PaymentRepository.java
+│   │   │           │
+│   │   │           ├── retry/
+│   │   │           │   ├── RetryPolicy.java
+│   │   │           │   └── RetryPolicyEngine.java
+│   │   │           │
+│   │   │           ├── service/
+│   │   │           │   └── PaymentService.java
+│   │   │           │
+│   │   │           └── specification/
+│   │   │               └── PaymentSpecification.java
 │   │   │
 │   │   └── resources/
 │   │       ├── static/
@@ -108,17 +180,20 @@ PayPilot/
 
 ---
 
-## 💳 Payment Information
+## 💳 Payment Model
 
 Each payment transaction contains information such as:
 
 - Payment ID
-- Payment amount
+- Amount
 - Payment method
 - Payment status
 - Failure reason
+- Customer type
+- Creation timestamp
+- Idempotency key
 
-Example:
+Example failed payment:
 
 ```text
 ID: 1
@@ -126,59 +201,196 @@ Amount: ₹4999
 Method: UPI
 Status: FAILED
 Failure Reason: BANK_TIMEOUT
+Customer Type: RETURNING
 ```
 
 Successful payments do not require a failure reason.
 
 ---
 
-## 📊 Dashboard
+## 🧠 Payment Intelligence
 
-The PayPilot dashboard provides an overview of payment performance.
+PayPilot analyzes payment failures and categorizes them into different failure categories.
 
-It displays:
-
-- Total Payments
-- Successful Payments
-- Failed Payments
-- Failure Rate
-- Payment History
-- Failure Reasons
-- Recovery Recommendations
-
-Example dashboard:
+### Failure Categories
 
 ```text
-┌──────────────────┬──────────────────┬──────────────────┬──────────────────┐
-│ Total Payments   │ Successful       │ Failed           │ Failure Rate     │
-│                  │                  │                  │                  │
-│       2          │       1          │       1          │      50%          │
-└──────────────────┴──────────────────┴──────────────────┴──────────────────┘
+TIMEOUT
+NETWORK
+CUSTOMER_ERROR
+PAYMENT_METHOD_ERROR
+SYSTEM_ERROR
+UNKNOWN
 ```
-
----
-
-## 🔄 Failure Recovery
-
-PayPilot analyzes failed payment transactions and provides recovery recommendations.
 
 For example:
 
 ```text
-Failure Reason:
 BANK_TIMEOUT
-
-Recommendation:
-Retry the payment after a short delay.
+       ↓
+TIMEOUT
+       ↓
+RETRY
 ```
 
-This helps users understand why a payment failed and what action can be taken.
+Another example:
+
+```text
+INVALID_CARD
+       ↓
+PAYMENT_METHOD_ERROR
+       ↓
+FALLBACK_PAYMENT_METHOD
+```
+
+---
+
+## 🔄 Recovery Strategy Engine
+
+The recovery engine determines an appropriate action based on the failure category.
+
+```text
+TIMEOUT
+   ↓
+RETRY
+
+NETWORK
+   ↓
+RETRY
+
+CUSTOMER_ERROR
+   ↓
+CUSTOMER_ACTION
+
+PAYMENT_METHOD_ERROR
+   ↓
+FALLBACK_PAYMENT_METHOD
+
+UNKNOWN
+   ↓
+NO_ACTION
+```
+
+This separates failure analysis from recovery decision-making and keeps the business logic modular.
+
+---
+
+## 🔁 Retry Policy Engine
+
+Retryable failures receive a retry policy.
+
+The system determines:
+
+- Whether the failure is retryable
+- Maximum retry attempts
+- Initial retry delay
+- Retry delay for individual attempts
+
+Example:
+
+```text
+Failure Category: TIMEOUT
+
+Retryable: true
+Maximum Attempts: 3
+Initial Delay: 1000 ms
+
+Attempt 1 → 2000 ms
+Attempt 2 → 4000 ms
+```
+
+Retry delays are calculated using an exponential backoff strategy.
+
+```text
+delay = initialDelay × 2^attempt
+```
+
+---
+
+## 🔐 Idempotency
+
+PayPilot supports idempotent payment creation using an `Idempotency-Key`.
+
+Example:
+
+```http
+POST /api/payments
+Idempotency-Key: PAYMENT-001
+```
+
+If the same idempotency key is submitted again, the existing payment is returned instead of creating another transaction.
+
+The idempotency key is also stored with a unique database constraint.
+
+This helps prevent duplicate payment creation when clients retry requests.
+
+---
+
+## 📊 Payment Analytics
+
+The analytics API provides:
+
+- Total payments
+- Successful payments
+- Failed payments
+- Failure rate
+- Failure category counts
+- Failed payment method counts
+
+Example:
+
+```json
+{
+  "totalPayments": 4,
+  "successfulPayments": 3,
+  "failedPayments": 1,
+  "failureRate": 25.0,
+  "failureCategoryCounts": {
+    "TIMEOUT": 1
+  },
+  "failurePaymentMethodCounts": {
+    "UPI": 1
+  }
+}
+```
+
+---
+
+## 🔎 Filtering, Pagination & Sorting
+
+The payment API supports dynamic querying using Spring Data JPA Specifications.
+
+Supported filters include:
+
+```text
+status
+paymentMethod
+customerType
+```
+
+Pagination example:
+
+```http
+GET /api/payments?page=0&size=10
+```
+
+Filtering example:
+
+```http
+GET /api/payments?status=FAILED
+```
+
+Sorting example:
+
+```http
+GET /api/payments?sortBy=createdAt&direction=desc
+```
+
+Multiple parameters can also be combined.
 
 ---
 
 ## 🌐 REST API
-
-The application exposes REST APIs for managing payment transactions.
 
 ### Create Payment
 
@@ -186,19 +398,86 @@ The application exposes REST APIs for managing payment transactions.
 POST /api/payments
 ```
 
-### Get All Payments
+Required header:
+
+```http
+Idempotency-Key: PAYMENT-001
+```
+
+Example request:
+
+```json
+{
+  "amount": 3000,
+  "paymentMethod": "CARD",
+  "status": "SUCCESSFUL",
+  "failureReason": null,
+  "customerType": "NEW"
+}
+```
+
+---
+
+### Get Payments
 
 ```http
 GET /api/payments
 ```
 
-### Delete Payment
+Supports:
+
+- Pagination
+- Filtering
+- Sorting
+
+---
+
+### Get Payment Analytics
 
 ```http
-DELETE /api/payments/{id}
+GET /api/payments/analytics
 ```
 
-> API paths should be verified against the current `PaymentController.java` implementation before changing them.
+Returns payment statistics and failure analytics.
+
+---
+
+### Get Recovery Recommendation
+
+```http
+GET /api/payments/{id}/recommendation
+```
+
+Returns a recovery recommendation based on the payment's failure reason.
+
+Example:
+
+```text
+Timeout failure detected.
+Retry the payment after a short delay.
+```
+
+---
+
+## 📖 API Documentation
+
+PayPilot includes OpenAPI/Swagger documentation.
+
+After starting the application, open:
+
+```text
+http://localhost:8080/swagger-ui/index.html
+```
+
+Swagger UI can be used to:
+
+- Explore available endpoints
+- View request parameters
+- View request/response schemas
+- Execute API requests
+- Test validation behavior
+- Test payment analytics
+- Test recovery recommendations
 
 ---
 
@@ -212,7 +491,7 @@ Create the database:
 CREATE DATABASE paypilot;
 ```
 
-The application connects to MySQL through:
+The application connects to MySQL using:
 
 ```properties
 spring.datasource.url=jdbc:mysql://localhost:3306/paypilot
@@ -220,21 +499,17 @@ spring.datasource.username=root
 spring.datasource.password=${DB_PASSWORD}
 ```
 
-The database password is loaded using an environment variable instead of being stored directly in the source code.
+The database password is loaded through an environment variable rather than being stored directly in the source code.
 
-### Set the Environment Variable
-
-Windows PowerShell:
+### Windows PowerShell
 
 ```powershell
 $env:DB_PASSWORD="your_mysql_password"
 ```
 
-Then start the Spring Boot application.
-
 ---
 
-## ▶️ How to Run the Project
+## ▶️ How to Run
 
 ### 1. Clone the Repository
 
@@ -246,9 +521,11 @@ git clone https://github.com/Tiger-SUCKS/Pay-Pilot.git
 
 Open the project in **IntelliJ IDEA**.
 
-### 3. Configure MySQL
+### 3. Start MySQL
 
-Make sure MySQL is running and create the database:
+Make sure MySQL is running.
+
+Create the database:
 
 ```sql
 CREATE DATABASE paypilot;
@@ -256,15 +533,13 @@ CREATE DATABASE paypilot;
 
 ### 4. Configure Database Password
 
-Set the `DB_PASSWORD` environment variable.
-
-Windows PowerShell:
+Set:
 
 ```powershell
 $env:DB_PASSWORD="your_mysql_password"
 ```
 
-### 5. Run Spring Boot
+### 5. Run the Application
 
 Run:
 
@@ -280,76 +555,93 @@ mvn spring-boot:run
 
 ### 6. Open the Dashboard
 
-Open your browser and visit:
-
 ```text
 http://localhost:8080
+```
+
+### 7. Open Swagger UI
+
+```text
+http://localhost:8080/swagger-ui/index.html
 ```
 
 ---
 
 ## 🧪 Testing
 
-The application can be tested by performing the following operations:
+The application has been verified through API testing using Swagger UI.
 
-### Successful Payment
+Tested functionality includes:
 
-Create a payment with a successful status and verify:
+### Payment Creation
 
-- Payment appears in history
-- Successful count increases
-- Total payment count increases
+- Valid payment creation
+- Request validation
+- Invalid payment status rejection
+- Invalid payment method rejection
+- Idempotency-key based payment creation
 
-### Failed Payment
+### Payment Retrieval
 
-Create a failed payment and verify:
+- Payment listing
+- Pagination
+- Filtering
+- Sorting
 
-- Failed count increases
-- Failure reason is displayed
-- Recovery recommendation is generated
-- Failure rate is recalculated
+### Analytics
 
-### Delete Payment
+- Total payment count
+- Successful payment count
+- Failed payment count
+- Failure rate
+- Failure category analysis
+- Failed payment method analysis
 
-Delete an existing transaction and verify:
+### Failure Recovery
 
-- Transaction is removed
-- Total payment count is updated
-- Dashboard statistics are refreshed
+- Failure classification
+- Recovery strategy selection
+- Retry eligibility
+- Retry delay calculation
+- Recovery recommendations
+
+### Error Handling
+
+- Payment-not-found handling
+- Request validation errors
+- Invalid request parameter handling
 
 ---
 
-## 🔐 Security
+## 🔐 Security & Reliability
 
-Sensitive database credentials should not be committed to GitHub.
+PayPilot follows several backend engineering practices:
 
-The application uses:
-
-```properties
-spring.datasource.password=${DB_PASSWORD}
-```
-
-instead of storing the actual MySQL password in `application.properties`.
-
-The `.gitignore` file should also prevent sensitive configuration files or environment files from being committed.
+- Database passwords are loaded using environment variables
+- Request validation prevents invalid payment data
+- Global exception handling provides consistent API errors
+- Idempotency prevents duplicate requests from creating duplicate transactions
+- Database uniqueness constraints protect idempotency keys
+- Transaction management is used during payment creation
+- Pagination prevents unnecessarily large result sets
+- Sort fields are restricted to supported properties
 
 ---
 
 ## 📈 Future Improvements
 
-Possible future improvements include:
+Potential future improvements include:
 
-- Payment retry mechanism
-- Advanced failure analytics
-- Transaction search and filtering
-- Date-based payment reports
-- Payment charts and graphs
 - Authentication and authorization
-- Email/SMS notifications
-- Export payment reports
-- Automated payment recovery
+- JWT-based security
 - Docker deployment
 - Cloud deployment
+- Production monitoring and metrics
+- Automated notification system
+- Advanced time-based analytics
+- Payment report exports
+- Integration with real payment gateways
+- Automated retry execution using scheduled/background processing
 
 ---
 
@@ -359,7 +651,9 @@ Possible future improvements include:
 
 ### PayPilot
 
-Payment Intelligence & Failure Recovery System
+**Payment Intelligence & Failure Recovery System**
+
+Built as a portfolio project to demonstrate backend development, REST API design, database persistence, failure analysis, reliability patterns, and Spring Boot architecture.
 
 ---
 
